@@ -4,6 +4,16 @@ import zipfile
 
 import numpy as np
 import tensorflow as tf
+# https://qiita.com/studio_haneya/items/4dfaf2fb2ac44818e7e0
+physical_devices = tf.config.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    for device in physical_devices:
+        tf.config.experimental.set_memory_growth(device, True)
+        print('{} memory growth: {}'.format(device, tf.config.experimental.get_memory_growth(device)))
+else:
+    print("Not enough GPU hardware devices available")
+
+    
 from tensorflow import keras
 
 import matplotlib.pyplot as plt
@@ -24,8 +34,6 @@ physical_devices = tf.config.experimental.list_physical_devices('GPU')
 url = "https://github.com/srihari-humbarwadi/datasets/releases/download/v0.1.0/data.zip"
 filename = os.path.join(os.getcwd(), "data.zip")
 keras.utils.get_file(filename, url)
-
-'''
 with zipfile.ZipFile("data.zip", "r") as z_fp:
     z_fp.extractall("./")
 
@@ -228,6 +236,8 @@ class AnchorBox:
         return tf.concat(anchors, axis=0)
 
 
+
+#### augmentatino tools ####
 def random_flip_horizontal(image, boxes):
     """Flips image and boxes horizontally with 50% chance
 
@@ -295,37 +305,39 @@ def resize_and_pad_image(
     return image, image_shape, ratio
     
 
-def preprocess_data(sample):
-    """Applies preprocessing step to a single sample
+# def preprocess_data(sample):
+#     """Applies preprocessing step to a single sample
 
-    Arguments:
-      sample: A dict representing a single training sample.
+#     Arguments:
+#       sample: A dict representing a single training sample.
 
-    Returns:
-      image: Resized and padded image with random horizontal flipping applied.
-      bbox: Bounding boxes with the shape `(num_objects, 4)` where each box is
-        of the format `[x, y, width, height]`.
-      class_id: An tensor representing the class id of the objects, having
-        shape `(num_objects,)`.
-    """
-    image = sample["image"]
-    bbox = swap_xy(sample["objects"]["bbox"])
-    class_id = tf.cast(sample["objects"]["label"], dtype=tf.int32)
+#     Returns:
+#       image: Resized and padded image with random horizontal flipping applied.
+#       bbox: Bounding boxes with the shape `(num_objects, 4)` where each box is
+#         of the format `[x, y, width, height]`.
+#       class_id: An tensor representing the class id of the objects, having
+#         shape `(num_objects,)`.
+#     """
+#     # print(sample)
 
-    image, bbox = random_flip_horizontal(image, bbox)
-    image, image_shape, _ = resize_and_pad_image(image)
+#     image = sample["image"]
+#     bbox = swap_xy(sample["objects"]["bbox"])
+#     class_id = tf.cast(sample["objects"]["label"], dtype=tf.int32)
 
-    bbox = tf.stack(
-        [
-            bbox[:, 0] * image_shape[1],
-            bbox[:, 1] * image_shape[0],
-            bbox[:, 2] * image_shape[1],
-            bbox[:, 3] * image_shape[0],
-        ],
-        axis=-1,
-    )
-    bbox = convert_to_xywh(bbox)
-    return image, bbox, class_id
+#     image, bbox = random_flip_horizontal(image, bbox)
+#     image, image_shape, _ = resize_and_pad_image(image)
+
+#     bbox = tf.stack(
+#         [
+#             bbox[:, 0] * image_shape[1],
+#             bbox[:, 1] * image_shape[0],
+#             bbox[:, 2] * image_shape[1],
+#             bbox[:, 3] * image_shape[0],
+#         ],
+#         axis=-1,
+#     )
+#     bbox = convert_to_xywh(bbox)
+#     return image, bbox, class_id
 
 
 class LabelEncoder:
@@ -427,10 +439,14 @@ class LabelEncoder:
         batch_size = images_shape[0]
 
         labels = tf.TensorArray(dtype=tf.float32, size=batch_size, dynamic_size=True)
+
         for i in range(batch_size):
             label = self._encode_sample(images_shape, gt_boxes[i], cls_ids[i])
             labels = labels.write(i, label)
         batch_images = tf.keras.applications.resnet.preprocess_input(batch_images)
+
+        # print(labels)
+
         return batch_images, labels.stack()
 
 
@@ -496,7 +512,9 @@ def build_head(output_filters, bias_init):
       A keras sequential model representing either the classification
         or the box regression head depending on `output_filters`.
     """
-    head = keras.Sequential([keras.Input(shape=[None, None, 256])])
+    head = keras.Sequential(
+      [keras.layers.InputLayer(input_shape=[None, None, 256])]
+      )
     kernel_init = tf.initializers.RandomNormal(0.0, 0.01)
     for _ in range(4):
         head.add(
@@ -697,7 +715,7 @@ class RetinaNetLoss(tf.losses.Loss):
 model_dir = "retinanet/"
 label_encoder = LabelEncoder()
 
-num_classes = 80
+num_classes = 4
 batch_size = 1
 
 learning_rates = [2.5e-06, 0.000625, 0.00125, 0.0025, 0.00025, 2.5e-05]
@@ -726,25 +744,78 @@ callbacks_list = [
         verbose=1,
     )
 ]
-'''
-
-#### Download and load data ####
-(train_dataset, val_dataset), dataset_info = tfds.load(
-    "coco/2017", split=["train", "validation"], with_info=True, data_dir="data"
-)
-
-# print(dataset_info)
-# print(train_dataset)
-for data in train_dataset:
-    print(data)
 
 
-
-'''
+####                    ####
 #### Preprocess dataset ####
+####                    ####
+@tf.function
+def parse_example(record):
+    keys_to_features = {
+        "image/image": tf.io.FixedLenFeature([], tf.string),
+        "image/label": tf.io.FixedLenFeature([], tf.int64),
+        "image/objects_num": tf.io.FixedLenFeature([], tf.int64),
+        "image/object/bbox/xmin": tf.io.VarLenFeature(tf.float32),
+        "image/object/bbox/ymin": tf.io.VarLenFeature(tf.float32),
+        "image/object/bbox/xmax": tf.io.VarLenFeature(tf.float32),
+        "image/object/bbox/ymax": tf.io.VarLenFeature(tf.float32),
+        "image/object/bbox/label": tf.io.VarLenFeature(tf.int64),
+    }
+    parsed = tf.io.parse_single_example(record, keys_to_features)
+    image = tf.io.decode_raw(parsed["image/image"], tf.uint8)
+    image = tf.cast(image, tf.float32)
+    image = tf.reshape(image, shape=[512,512,3])
+    
+    image, image_shape, _ = resize_and_pad_image(image)
+
+    object_num = tf.cast(parsed["image/objects_num"], tf.int32)
+    class_ids = tf.cast(parsed["image/object/bbox/label"].values, tf.int32)
+    # tf.print(class_ids)
+
+    xmin = tf.expand_dims(parsed["image/object/bbox/xmin"].values, 0)
+    ymin = tf.expand_dims(parsed["image/object/bbox/ymin"].values, 0)
+    xmax = tf.expand_dims(parsed["image/object/bbox/xmax"].values, 0)
+    ymax = tf.expand_dims(parsed["image/object/bbox/ymax"].values, 0)
+    
+    bbox = tf.concat(axis=0, values=[xmin, ymin, xmax, ymax])
+    bbox = tf.transpose(bbox) # 4*N -> N*4
+    # tf.print(bbox)
+
+    bbox = tf.stack(
+        [
+            bbox[:, 0] * image_shape[1],
+            bbox[:, 1] * image_shape[0],
+            bbox[:, 2] * image_shape[1],
+            bbox[:, 3] * image_shape[0],
+        ],
+        axis=-1,
+    )
+    bbox = convert_to_xywh(bbox)
+
+
+
+    return image, bbox, class_ids
+
+
+# #### Download and load data ####
+# (train_dataset, val_dataset), dataset_info = tfds.load(
+#     "coco/2017", split=["train", "validation"], with_info=True, data_dir="data"
+# )
+# autotune = tf.data.experimental.AUTOTUNE
+# # train_dataset = train_dataset.map(preprocess_data, num_parallel_calls=autotune)
+# train_dataset = train_dataset.map(preprocess_data)
+
+
 autotune = tf.data.experimental.AUTOTUNE
-train_dataset = train_dataset.map(preprocess_data, num_parallel_calls=autotune)
-train_dataset = train_dataset.shuffle(8 * batch_size)
+train_dataset = tf.data.TFRecordDataset(["train{:02d}-1267.tfrecords".format(i) for i in range(4)]) \
+    .map(parse_example, num_parallel_calls=autotune)
+
+# print(train_dataset["x"])
+# print(len(list(train_dataset.__dict__)))
+# print(len(list(train_dataset["image/image"])))
+
+### train_dataset = train_dataset.map(preprocess_data, num_parallel_calls=autotune)
+# train_dataset = train_dataset.shuffle(8 * batch_size)
 train_dataset = train_dataset.padded_batch(
     batch_size=batch_size, padding_values=(0.0, 1e-8, -1), drop_remainder=True
 )
@@ -754,9 +825,12 @@ train_dataset = train_dataset.map(
 train_dataset = train_dataset.apply(tf.data.experimental.ignore_errors())
 train_dataset = train_dataset.prefetch(autotune)
 
-val_dataset = val_dataset.map(preprocess_data, num_parallel_calls=autotune)
+
+val_dataset = tf.data.TFRecordDataset("train04-1266.tfrecords") \
+    .map(parse_example)
+# val_dataset = val_dataset.map(preprocess_data, num_parallel_calls=autotune)
 val_dataset = val_dataset.padded_batch(
-    batch_size=1, padding_values=(0.0, 1e-8, -1), drop_remainder=True
+    batch_size=batch_size, padding_values=(0.0, 1e-8, -1), drop_remainder=True
 )
 val_dataset = val_dataset.map(label_encoder.encode_batch, num_parallel_calls=autotune)
 val_dataset = val_dataset.apply(tf.data.experimental.ignore_errors())
@@ -772,16 +846,16 @@ val_dataset = val_dataset.prefetch(autotune)
 # train_steps = 4 * 100000
 # epochs = train_steps // train_steps_per_epoch
 
+
 epochs = 100
 
 # Running 100 training and 50 validation steps,
 # remove `.take` when training on the full dataset
 
 model.fit(
-    train_dataset.take(100),
+    train_dataset,
     validation_data=val_dataset.take(50),
     epochs=epochs,
     callbacks=callbacks_list,
     verbose=1,
 )
-'''

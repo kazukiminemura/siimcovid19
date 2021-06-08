@@ -32,7 +32,7 @@ if "text/plain" == filetype:
 
 # load our object detector
 logger.debug("[INFO] loading object detector...")
-model = load_model("./retinanet/weights.10-0.8773.hdf5")
+model = load_model("./retinanet/weights.30-0.8596.hdf5")
 
 # get ground truth
 import pandas as pd
@@ -64,17 +64,16 @@ for imagePath in imagePaths:
     (h, w) = image.shape[:2]
 
     # scale the predicted boudnign box coordinates
-    startX = int(startX * w)
-    startY = int(startY * h)
-    endX = int(endX * w)
-    endY = int(endY * h)
+    [startX, startY, endX, endY] = 
+        np.array([startX, startY, endX, endY] * np.array([w, h, w, h]),
+        dtype="int")
 
     # draw the predicted bounding box and class label
     y = startY - 10 if startY - 10 > 10 else startY + 10
     cv2.putText(image, str(label), (startX, y), cv2.FONT_HERSHEY_SIMPLEX,
         0.65, (0, 255, 0), 2)
     cv2.rectangle(image, (startX, startY), (endX, endY),
-        (0, 255, 0), 2)
+        (0, 255, 255), 2)
 
     # draw ground truth boxes
     basename = os.path.basename(imagePath)[:-4]
@@ -87,7 +86,7 @@ for imagePath in imagePaths:
         xmaxs = int(((box["width"] + box["x"]) / OWidth) * w)
         ymaxs = int(((box["height"] + box["y"]) / OHeight) * h)
         cv2.rectangle(image, (xmins, ymins), (xmaxs, ymaxs),
-            (0, 0, 255), 2)
+            (0, 255, 0), 2)
 
     cv2.imshow("Output", image)
     cv2.waitKey(0)

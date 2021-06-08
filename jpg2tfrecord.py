@@ -70,7 +70,7 @@ def load_image(path, dim=DIM, ch=3):
 # plt.imshow(load_image(train_df.image_path.iloc[100], dim=-1))# show 100th image
 # print(load_image(train_df.image_path.iloc[100]))
 
-'''
+
 # get dcm image info
 import pydicom
 def get_img_shape(path):
@@ -100,18 +100,24 @@ def _int64_feature(value):
     """Returns an int64_list from a bool / enum / int / uint."""
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
+def _int64_list_feature(value):
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
 
 
 def train_serialize_example( \
-    feature0, feature1, feature2, feature3, feature4, feature5 ,feature6):
+    feature0, feature1, feature2, feature3, feature4, feature5 ,feature6,feature7,feature8):
     feature = {
       'image/image'   : _bytes_feature(feature0),
       'image/image_id'   : _bytes_feature(feature1),
-      'image/object/bbox/xmin'    : _float_list_feature(feature2),
-      'image/object/bbox/ymin'    : _float_list_feature(feature3),
-      'image/object/bbox/xmax'    : _float_list_feature(feature4),
-      'image/object/bbox/ymax'    : _float_list_feature(feature5),
-      'image/label'   : _int64_feature(feature6),
+      'image/objects_num'   : _int64_feature(feature2),
+      'image/object/bbox/xmin'    : _float_list_feature(feature3),
+      'image/object/bbox/ymin'    : _float_list_feature(feature4),
+      'image/object/bbox/xmax'    : _float_list_feature(feature5),
+      'image/object/bbox/ymax'    : _float_list_feature(feature6),
+      'image/object/bbox/label'    : _int64_list_feature(feature7),
+      'image/label'   : _int64_feature(feature8),
     }
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
@@ -138,6 +144,7 @@ for fold in tqdm(folds): # create tfrecord for each fold
             image_id   = row['image_id']
             boxs      = row['boxes']
             label     = np.array(row['class_label'], dtype=np.uint8)
+            # box_labels = row['label']
 
             OWidth, OHeight  = get_img_shape(row['filepath'])
 
@@ -151,24 +158,31 @@ for fold in tqdm(folds): # create tfrecord for each fold
             ymins=[]
             xmaxs=[]
             ymaxs=[]
+            box_labels = []
             if boxs == boxs: ## check nan
                 for box in ast.literal_eval(boxs):
                     xmins.append(box["x"] / OWidth)
                     ymins.append(box["y"] / OHeight)
                     xmaxs.append((box["width"] + box["x"]) / OWidth)
                     ymaxs.append((box["height"] + box["y"]) / OHeight)
-                    # bbox.append([xmin, ymin, xmax, ymax])
+                    
+                    box_labels.append(label)
             else:
                 continue                    
             # logger.debug(bbox)
 
+            object_num = len(xmins)
+            # logger.debug(object_num)
+
             feature  = train_serialize_example(
                 image_raw.tostring(),
                 str.encode(image_id),
+                object_num,
                 xmins,
                 ymins,
                 xmaxs,
                 ymaxs,
+                box_labels,
                 label,
                 )
             writer.write(feature)
@@ -178,4 +192,3 @@ for fold in tqdm(folds): # create tfrecord for each fold
             filename = filepath.split('/')[-1]
             filesize = os.path.getsize(filepath)/10**6
             print(filename,':',np.around(filesize, 2),'MB')
-'''
