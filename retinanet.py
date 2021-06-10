@@ -93,7 +93,7 @@ def convert_to_corners(boxes):
 
 
 def visualize_detections(
-    image, boxes, classes, scores, gboxes, figsize=(7, 7), linewidth=1, color=[0, 0, 1]
+    image, boxes, classes, scores, gboxes, gclasses, figsize=(7, 7), linewidth=1, color=[0, 0, 1]
 ):
     """Visualize Detections"""
     image = np.array(image, dtype=np.uint8)
@@ -119,7 +119,9 @@ def visualize_detections(
         )
 
     # show ground truth
+    _cls = gclasses
     for box in gboxes:
+        text = "[GT] {}".format(_cls)
         x1, y1, x2, y2 = box
         w, h = x2 - x1, y2 - y1
         patch = plt.Rectangle(

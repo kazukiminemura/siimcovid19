@@ -79,8 +79,7 @@ detections = DecodePredictions(confidence_threshold=0.5)(image, predictions)
 inference_model = tf.keras.Model(inputs=image, outputs=detections)
 
 # load validation image
-val_dataset = tf.data.TFRecordDataset(
-    ["train{:02d}-1267.tfrecords".format(i) for i in range(4)]) \
+val_dataset = tf.data.TFRecordDataset("train00-1267.tfrecords") \
     .map(parse_example) \
 
 int2str = (
@@ -90,9 +89,10 @@ int2str = (
     'Negatie for Pneumonia')
 
 
-for sample in val_dataset.take(2):
+for sample in val_dataset.take(5):
     # print(sample[0])
     image = sample[0]
+    gclasses = sample[1][0]
     gboxes = sample[1][1]
     
     input_image, ratio = prepare_image(image)
@@ -111,6 +111,7 @@ for sample in val_dataset.take(2):
         class_names,
         detections.nmsed_scores[0][:num_detections],
         gboxes,
+        int2str[int(gclasses)],
     )
 
 
