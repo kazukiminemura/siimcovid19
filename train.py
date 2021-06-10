@@ -141,7 +141,6 @@ def compute_iou(boxes1, boxes2):
 
 
 
-
 class AnchorBox:
     """Generates anchor boxes.
 
