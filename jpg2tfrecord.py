@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd 
 import os, shutil
 import random
+import matplotlib.pyplot as plt
 
 from glob import glob
 from sklearn.cluster import KMeans
@@ -41,19 +42,26 @@ name2label = {'Typical Appearance': 3,
  'Negative for Pneumonia': 0}
 class_names = list(name2label.keys())
 label2name = {v:k for k, v in name2label.items()}
-train_df['class_name']  = train_df.progress_apply( \
-    lambda row:row[class_names].iloc[[row[class_names].values.argmax()]].index.tolist()[0], axis=1)
+train_df['class_name']  = \
+    train_df.progress_apply(lambda row:row[class_names].iloc[ \
+    [row[class_names].values.argmax()]].index.tolist()[0], axis=1)
 train_df['class_label'] = train_df.class_name.map(name2label)
 
 # print(train_df.head()["boxes"])
-# print(train_df.head()["class_label"])
+# print(train_df.head()["class_name"])
+
+train_df["class_name"].hist()
+plt.tight_layout()
+plt.show()
 
 
+'''
 ### Stratified KFold by Groups ###filepath
 from sklearn.model_selection import GroupKFold, StratifiedKFold
 gkf  = GroupKFold(n_splits = 5)
 train_df['fold'] = -1
-for fold, (train_idx, val_idx) in enumerate(gkf.split(train_df, groups = train_df.StudyInstanceUID.tolist())):
+for fold, (train_idx, val_idx) in enumerate( \
+    gkf.split(train_df, groups = train_df.StudyInstanceUID.tolist())):
     train_df.loc[val_idx, 'fold'] = fold
 # print(train_df.head())
 
@@ -192,3 +200,4 @@ for fold in tqdm(folds): # create tfrecord for each fold
             filename = filepath.split('/')[-1]
             filesize = os.path.getsize(filepath)/10**6
             print(filename,':',np.around(filesize, 2),'MB')
+'''
