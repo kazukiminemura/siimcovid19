@@ -733,6 +733,11 @@ optimizer = tf.optimizers.SGD(learning_rate=learning_rate_fn, momentum=0.9)
 model.compile(loss=loss_fn, optimizer=optimizer)
 
 
+label_weights_dir="./retinanet"
+latest_label_checkpoint = tf.train.latest_checkpoint(label_weights_dir)
+model.load_weights(latest_label_checkpoint)
+
+
 #### setting up callbacks ####
 callbacks_list = [
     tf.keras.callbacks.ModelCheckpoint(
@@ -790,9 +795,6 @@ def parse_example(record):
         axis=-1,
     )
     bbox = convert_to_xywh(bbox)
-
-
-
     return image, bbox, class_ids
 
 
@@ -846,7 +848,7 @@ val_dataset = val_dataset.prefetch(autotune)
 # epochs = train_steps // train_steps_per_epoch
 
 
-epochs = 100
+epochs = 1
 
 # Running 100 training and 50 validation steps,
 # remove `.take` when training on the full dataset
@@ -858,3 +860,5 @@ model.fit(
     callbacks=callbacks_list,
     verbose=1,
 )
+
+model.save("./retinanet/saved",save_format='tf')
